@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="在本机整理、分类和复核学术文献。" />
+    <title>文献分类工作台</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%231c1e24'/%3E%3Cpath d='M17 14h30v36H17z' fill='%23f4f6f9'/%3E%3Cpath d='M23 23h18M23 31h18M23 39h12' stroke='%2308758e' stroke-width='3'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/static/styles.css?v=20261017" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div>
+            <strong>文献分类工作台</strong>
+            <span>本地研究资料整理</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="header-status" id="health-status" aria-live="polite">正在检查模型配置</div>
+        <button class="button secondary model-settings-trigger" id="open-model-settings-button" type="button">模型设置</button>
+      </div>
+    </header>
+
+    <div class="app-shell">
+      <nav class="side-nav" aria-label="工作区导航">
+        <p class="nav-caption">工作流程</p>
+        <button class="nav-item is-active" data-view="documents" aria-current="page">
+          <span class="nav-index">01</span><span>文献资料</span>
+        </button>
+        <button class="nav-item" data-view="taxonomy">
+          <span class="nav-index">02</span><span>分类体系</span>
+        </button>
+        <button class="nav-item" data-view="results">
+          <span class="nav-index">03</span><span>运行复核</span>
+        </button>
+        <div class="nav-summary">
+          <p>当前工作集</p>
+          <span>当前文献</span>
+          <strong id="nav-document-count">0</strong>
+          <span>已选文献</span>
+          <strong id="nav-selected-count">0</strong>
+        </div>
+      </nav>
+
+      <main class="workspace">
+        <section class="view is-active" id="view-documents">
+          <div class="view-heading">
+            <div>
+              <span class="view-index">01 / 文献资料</span>
+              <h1>导入文献</h1>
+              <p>上传带文本层的 PDF。文件、解析文本和数据库仅保存在本机。</p>
+            </div>
+            <button class="button secondary" id="select-all-button" type="button">全选可用文献</button>
+          </div>
+
+          <form class="upload-zone" id="upload-form">
+            <input id="file-input" name="files" type="file" accept="application/pdf,.pdf" multiple hidden />
+            <label for="file-input" class="upload-label">
+              <span class="upload-symbol" aria-hidden="true">↑</span>
+              <span class="upload-copy">
+                <strong>将 PDF 放入工作集</strong>
+                <span>拖放文件，或一次选择多篇；每个文件最大 40 MB</span>
+              </span>
+            </label>
+            <button class="button primary" id="upload-button" type="button">选择 PDF</button>
+          </form>
+
+          <div class="summary-strip" aria-label="文献状态摘要">
+            <div><span>全部文献</span><strong id="metric-total">0</strong></div>
+            <div><span>可以分类</span><strong id="metric-ready">0</strong></div>
+            <div><span>等待处理</span><strong id="metric-errors">0</strong></div>
+          </div>
+
+          <div class="data-surface">
+            <div class="table-toolbar">
+              <h2>文献列表</h2>
+              <span id="document-selection-label">尚未选择文献</span>
+            </div>
+            <div id="document-groups" class="document-groups"></div>
+            <div class="empty-state" id="document-empty">
+              <strong>尚未上传文献</strong>
+              <span>上传 PDF 后，这里会显示解析结果和可分类内容。</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-taxonomy">
+          <div class="view-heading">
+            <div>
+              <span class="view-index">02 / 分类体系</span>
+              <h1>建立分类体系</h1>
+              <p>先明确分类目的，再定义互相区分的类别边界。</p>
+            </div>
+          </div>
+
+          <div class="segmented" role="tablist" aria-label="分类体系创建方式">
+            <button class="segment is-active" data-taxonomy-mode="manual" type="button">自定义分类体系</button>
+            <button class="segment" data-taxonomy-mode="generated" type="button" disabled>自动生成分类体系</button>
+          </div>
+          <div class="inline-notice generation-unavailable-notice is-hidden" id="generation-unavailable-notice">
+            尚未配置通用大模型。你仍可自行定义分类体系，并使用 Jev 执行文献分类。
+          </div>
+
+          <form class="form-surface" id="manual-taxonomy-form">
+            <div class="editor-context is-hidden" id="taxonomy-edit-context">
+              <div>
+                <strong id="taxonomy-edit-label"></strong>
+                <span>保存后将创建新版本，历史分类结果不会改变。</span>
+              </div>
+              <button class="button text-button" id="cancel-taxonomy-edit-button" type="button">取消编辑</button>
+            </div>
+            <div class="form-grid two-columns">
+              <label>
+                <span>分类体系名称</span>
+                <input id="taxonomy-name" required maxlength="240" placeholder="例如：城市遥感研究主题" />
+              </label>
+              <label>
+                <span>分类目的</span>
+                <input id="taxonomy-objective" maxlength="3000" placeholder="例如：按照主要研究主题分类" />
+              </label>
+            </div>
+            <div class="section-heading-row">
+              <div>
+                <h2>类别定义</h2>
+                <p>填写面向使用者的类别名称和边界；内部标识由系统自动维护。</p>
+              </div>
+              <button class="button secondary" id="add-category-button" type="button">添加类别</button>
+            </div>
+            <div id="category-editor"></div>
+            <div class="form-actions">
+              <button class="button primary" id="save-taxonomy-button" type="submit">保存分类体系</button>
+            </div>
+          </form>
+
+          <form class="form-surface is-hidden" id="generate-taxonomy-form">
+            <div class="form-grid three-columns">
+              <label class="wide-field">
+                <span>分类目的</span>
+                <input id="generation-objective" required placeholder="例如：按照研究方法形成互斥类别" />
+              </label>
+              <label>
+                <span>类别数量</span>
+                <input id="generation-category-count" type="number" min="2" max="20" value="5" />
+              </label>
+              <label>
+                <span>候选方案</span>
+                <select id="generation-scheme-count">
+                  <option value="3">3 套</option>
+                  <option value="4">4 套</option>
+                  <option value="5">5 套</option>
+                </select>
+              </label>
+            </div>
+            <div class="inline-notice">
+              所选文献语料概况：生成模型仅接收由当前所选文献的标题和摘要形成的语料概况，不读取未选文献、完整论文正文或电脑中的其他文件。
+            </div>
+            <div class="form-actions">
+              <button class="button primary" type="submit">生成分类方案</button>
+            </div>
+            <div class="objective-interpretation is-hidden" id="objective-interpretation">
+              <span>模型理解的分类维度</span>
+              <strong id="objective-interpretation-text"></strong>
+            </div>
+            <div id="scheme-candidates" class="scheme-list"></div>
+          </form>
+
+          <div class="data-surface taxonomy-list-surface">
+            <div class="table-toolbar">
+              <h2>已保存的分类体系</h2>
+            </div>
+            <div id="taxonomy-list" class="taxonomy-list"></div>
+            <div class="empty-state" id="taxonomy-empty">
+              <strong>尚未保存分类体系</strong>
+              <span>自行定义类别，或从生成的候选方案中选择一套。</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-results">
+          <div class="view-heading">
+            <div>
+              <span class="view-index">03 / 运行复核</span>
+              <h1>运行与复核</h1>
+              <p>选择分类体系，对已选文献执行分类，并逐篇检查概率分布。</p>
+            </div>
+          </div>
+
+          <div class="run-controls">
+            <label>
+              <span>分类体系</span>
+              <select id="run-taxonomy-select"></select>
+            </label>
+            <div class="run-copy">
+              <strong id="run-selected-count">0 篇文献待分类</strong>
+              <span>分类前请确认文献解析状态和类别边界。</span>
+            </div>
+            <button class="button primary" id="run-classification-button" type="button">开始分类</button>
+          </div>
+
+          <div class="job-status is-hidden" id="job-status" aria-live="polite">
+            <div>
+              <strong id="job-status-title">分类任务运行中</strong>
+              <span id="job-status-detail"></span>
+            </div>
+            <div class="job-count" id="job-status-count">0 / 0</div>
+          </div>
+
+          <div class="data-surface">
+            <div class="table-toolbar">
+              <div class="result-toolbar-copy">
+                <h2>分类结果</h2>
+                <span>点击文献查看全部类别概率</span>
+              </div>
+              <div class="export-actions is-hidden" id="result-export-actions" aria-label="导出当前分类结果">
+                <button class="button secondary" id="open-zotero-import-button" type="button">导入 Zotero</button>
+                <a class="button secondary" id="export-results-csv" href="#">导出 CSV</a>
+                <a class="button secondary" id="export-results-json" href="#">导出 JSON</a>
+              </div>
+            </div>
+            <div class="result-browser is-hidden" id="result-browser">
+              <div class="result-browser-toolbar">
+                <label class="result-filter">
+                  <span>分类体系版本</span>
+                  <select id="result-taxonomy-filter"></select>
+                </label>
+                <label class="result-filter">
+                  <span>运行批次</span>
+                  <select id="result-run-filter"></select>
+                </label>
+                <div class="result-run-overview" aria-live="polite">
+                  <div class="result-run-header">
+                    <span class="result-run-state" id="result-run-state">请选择运行批次</span>
+                    <button class="button text-button result-run-delete" id="delete-result-run-button" type="button">删除本次分类结果</button>
+                  </div>
+                  <div class="result-run-metrics">
+                    <span><strong id="result-success-count">0</strong> 成功</span>
+                    <span><strong id="result-failure-count">0</strong> 失败</span>
+                    <span><strong id="result-review-count">0</strong> 待处理</span>
+                  </div>
+                </div>
+              </div>
+              <nav class="result-category-tabs" id="result-category-tabs" role="tablist" aria-label="结果类别"></nav>
+              <div class="result-table-host" id="result-table-host" role="tabpanel"></div>
+            </div>
+            <div class="empty-state" id="result-empty">
+              <strong>尚无分类结果</strong>
+              <span>选择文献和分类体系后开始运行。</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="model-settings-dialog" class="detail-dialog settings-dialog">
+      <form id="model-settings-form" autocomplete="off">
+        <div class="dialog-header">
+          <div>
+            <span class="dialog-kicker">本机配置</span>
+            <h2>模型设置</h2>
+            <p>密钥保存在项目根目录的 .env 文件中</p>
+          </div>
+          <button class="icon-button" id="close-model-settings-button" type="button" aria-label="关闭模型设置">×</button>
+        </div>
+        <div class="model-settings-content">
+          <fieldset class="model-provider-settings">
+            <legend class="sr-only">Jev 分类模型</legend>
+            <div class="model-provider-heading">
+              <h3>Jev 分类模型</h3>
+              <span class="provider-state" id="typesafe-key-state">正在读取</span>
+            </div>
+            <p class="model-provider-description">保存配置后会自动验证 TypeSafe API Key 和所选 Jev 模型。</p>
+            <div class="model-settings-grid">
+              <label>
+                <span>API Key</span>
+                <input id="typesafe-api-key-input" type="password" autocomplete="new-password" maxlength="2000" spellcheck="false" placeholder="留空则保留当前密钥" />
+              </label>
+              <label>
+                <span>模型名称</span>
+                <input id="typesafe-model-input" required maxlength="300" spellcheck="false" />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset class="model-provider-settings">
+            <legend class="sr-only">通用大模型</legend>
+            <div class="model-provider-heading">
+              <h3>通用大模型</h3>
+              <span class="provider-state" id="generation-key-state">正在读取</span>
+            </div>
+            <p class="model-provider-description">默认使用硅基流动，也支持采用 Bearer 密钥、Chat Completions 和 JSON 输出的 OpenAI 兼容服务。</p>
+            <div class="model-settings-grid">
+              <label>
+                <span>API Key</span>
+                <input id="generation-api-key-input" type="password" autocomplete="new-password" maxlength="2000" spellcheck="false" placeholder="留空则保留当前密钥" />
+              </label>
+              <label>
+                <span>API 地址</span>
+                <input id="generation-base-url-input" type="url" required maxlength="1000" spellcheck="false" />
+              </label>
+              <label class="model-name-field">
+                <span>模型名称</span>
+                <input id="generation-model-input" required maxlength="300" spellcheck="false" />
+              </label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" id="cancel-model-settings-button" type="button">取消</button>
+          <button class="button primary" type="submit">保存配置</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="document-dialog" class="detail-dialog document-dialog">
+      <form id="document-metadata-form">
+        <div class="dialog-header">
+          <div>
+            <span class="dialog-kicker">元数据预览</span>
+            <h2 id="document-dialog-title">文献标题</h2>
+            <p id="document-dialog-file"></p>
+          </div>
+          <button class="icon-button" id="close-document-dialog-button" type="button" aria-label="关闭预览">×</button>
+        </div>
+        <section class="metadata-form">
+          <div id="document-warning-list" class="warning-list"></div>
+          <label>
+            <span>标题</span>
+            <input id="document-title-input" required maxlength="1000" />
+          </label>
+          <label>
+            <span>摘要</span>
+            <textarea id="document-abstract-input" rows="9" maxlength="20000"></textarea>
+          </label>
+          <label>
+            <span>关键词</span>
+            <input id="document-keywords-input" placeholder="使用逗号或分号分隔" />
+          </label>
+          <details class="extracted-preview">
+            <summary>查看初始提取结果</summary>
+            <dl>
+              <dt>标题</dt>
+              <dd id="extracted-title"></dd>
+              <dt>摘要</dt>
+              <dd id="extracted-abstract"></dd>
+              <dt>关键词</dt>
+              <dd id="extracted-keywords"></dd>
+            </dl>
+          </details>
+        </section>
+        <div class="dialog-actions">
+          <button class="button secondary" id="cancel-document-edit-button" type="button">取消</button>
+          <button class="button primary" type="submit">保存并确认</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="result-dialog" class="detail-dialog">
+      <div class="dialog-header">
+        <div>
+          <span class="dialog-kicker">分类详情</span>
+          <h2 id="detail-title">文献标题</h2>
+          <p id="detail-file"></p>
+        </div>
+        <button class="icon-button" id="close-dialog-button" type="button" aria-label="关闭详情">×</button>
+      </div>
+      <div class="confidence-summary">
+        <div><span>最终类别</span><strong id="detail-category"></strong></div>
+        <div><span>总体置信度</span><strong id="detail-confidence"></strong></div>
+        <div><span>前两类差值</span><strong id="detail-gap"></strong></div>
+      </div>
+      <section class="probability-section">
+        <div class="section-heading-row compact">
+          <h3>各类别匹配概率</h3>
+          <span>总和为 100%</span>
+        </div>
+        <div id="probability-list" class="probability-list"></div>
+      </section>
+      <section class="review-section">
+        <label>
+          <span>修正类别</span>
+          <select id="review-category-select"></select>
+        </label>
+        <label>
+          <span>复核备注</span>
+          <textarea id="review-note" rows="3" placeholder="可选"></textarea>
+        </label>
+        <div class="review-actions">
+          <button class="button primary" data-review-action="confirm" type="button">确认分类</button>
+          <button class="button secondary" data-review-action="correct" type="button">保存修正</button>
+          <button class="button secondary" data-review-action="defer" type="button">暂不分类</button>
+          <button class="button text-button" data-review-action="unclassified" type="button">标记为未分类</button>
+        </div>
+      </section>
+      <footer class="dialog-footer" id="detail-metadata"></footer>
+    </dialog>
+
+    <dialog id="zotero-import-dialog" class="detail-dialog zotero-dialog">
+      <form id="zotero-import-form">
+        <div class="dialog-header">
+          <div>
+            <span class="dialog-kicker">可选输出</span>
+            <h2>导入 Zotero</h2>
+            <p id="zotero-import-subtitle">将当前分类批次的文献和所选分类结构写入本地 Zotero</p>
+          </div>
+          <button class="icon-button" id="close-zotero-import-button" type="button" aria-label="关闭 Zotero 导入">×</button>
+        </div>
+        <div class="zotero-import-status" id="zotero-import-status" aria-live="polite">
+          正在检测 Zotero
+        </div>
+        <fieldset class="zotero-export-options">
+          <legend>分类组织方式</legend>
+          <label>
+            <input id="zotero-write-tags" type="checkbox" checked>
+            <span><strong>导出标签</strong><small>写入可搜索的分类标签</small></span>
+          </label>
+          <label>
+            <input id="zotero-write-collections" type="checkbox" checked>
+            <span><strong>导出目录</strong><small>加入 Zotero 分类目录（集合）</small></span>
+          </label>
+        </fieldset>
+        <div class="zotero-import-summary is-hidden" id="zotero-import-summary"></div>
+        <div class="zotero-import-list" id="zotero-import-list"></div>
+        <div class="dialog-actions">
+          <button class="button secondary" id="cancel-zotero-import-button" type="button">取消</button>
+          <button class="button primary" id="confirm-zotero-import-button" type="submit" disabled>确认导入</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div
+      class="notification-region"
+      id="notification-region"
+      popover="manual"
+      aria-live="polite"
+      aria-label="操作通知"
+    ></div>
+  </body>
+</html>

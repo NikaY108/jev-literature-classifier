@@ -1,0 +1,12 @@
+fastapi>=0.116,<1
+httpx>=0.28,<1
+pydantic-settings>=2.10,<3
+pypdf>=6,<7
+python-multipart>=0.0.20,<1
+sqlalchemy>=2.0,<3
+typesafe-sdk>=0.7.1,<1
+uvicorn[standard]>=0.35,<1
+pytest>=8.4,<9
+pytest-asyncio>=1.1,<2
+ruff>=0.13,<1
+
